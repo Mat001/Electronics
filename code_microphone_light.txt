@@ -1,0 +1,67 @@
+Example 3
+Microphone & RGB LED
+
+Adopted idea with wiring and original code:
+http://www.arduino.cc/cgi-bin/yabb2/YaBB.pl?num=1277468653/
+
+**************************************************************
+Arduino code (only)
+**************************************************************
+
+
+int MicPin = 0;          // pin that the mic is attached to
+
+int redPin = 9;          // pins that the cathodes of LED are attached to  
+int greenPin = 10;
+int bluePin = 11;
+
+int MicValue = 0;        // the Microphone value
+int t=60;                // mic sensitivity - 50-90 seems optimal
+
+void setup() {
+  //Serial.begin(9600);  //for test the input value initialize serial
+  pinMode(redPin, OUTPUT);
+  pinMode(greenPin, OUTPUT);
+  pinMode(bluePin, OUTPUT);
+
+  analogWrite(redPin, 255);       //turn off all LEDs
+  analogWrite(greenPin, 255);
+  analogWrite(bluePin, 255);
+}
+
+void loop() {
+
+  MicValue = analogRead(MicPin);  //read the value of the microphone
+
+  //Serial.println(MicValue);     //for test the input value
+
+  if (MicValue > 530+t) {     //adjust this value to the desired sensitivity
+    analogWrite(bluePin,0); //lights up blue
+    delay(15);              //small delay for quick response at low noise levels
+    }
+  
+  if (MicValue > 540+t) {       //adjust this value to the desired sensitivity
+    analogWrite(bluePin,255); //lights up green and turn off blue
+    analogWrite(greenPin, 0);
+    delay(60);               //mid delay for response at mid noise levels
+    }
+  
+  if (MicValue > 550+t) {        //adjust this value to the desired sensitivity
+    analogWrite(greenPin,255); //lights up red and turn off green
+    analogWrite(redPin, 0);
+    delay(140);                //high delay for response at high noise levels
+    }
+
+analogWrite(greenPin, 255);    //Turn off all LEDs
+analogWrite(redPin, 255);
+analogWrite(bluePin,255);  
+
+} 
+
+analogWrite(greenPin, 255);    //Turn off all LEDs
+analogWrite(redPin, 255);
+analogWrite(bluePin,255);  
+
+} 
+
+

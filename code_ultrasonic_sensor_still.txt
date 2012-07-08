@@ -1,0 +1,165 @@
+Example4
+Ping))) ultrasonic distance sensor
+
+The code is exactly the same as for first distance sensor, except the last two lines, which I deleted 
+(this changes mandala like graphics into radar screen-like one).
+
+Adopted idea with the original code:
+http://webzone.k3.mah.se/projects/arduino-workshop/projects/arduino_meets_processing/instructions/ultrasound.html
+and 
+http://arduino.cc/en/Tutorial/Ping
+
+********************************************************************
+Arduino code:
+********************************************************************
+
+ /* Ultrasonic Sensor
+ *
+ * Reads values (00014-01199) from an ultrasound sensor (3m sensor)
+ * and writes the values to the serialport.
+ */
+ 
+int ultraSoundSignal = 7; // Ultrasound signal pin
+int val = 0;
+int ultrasoundValue = 0;
+int timecount = 0; // Echo counter
+int ledPin = 13; // LED connected to digital pin 13
+
+void setup() {
+  Serial.begin(9600);            // Sets the baud rate to 9600
+  pinMode(ledPin, OUTPUT);       // Sets the digital pin as output
+}
+
+void loop() {
+ timecount = 0;
+ val = 0;
+ pinMode(ultraSoundSignal, OUTPUT); // Switch signalpin to output
+
+// Send low-high-low pulse to activate the trigger pulse of the sensor
+
+digitalWrite(ultraSoundSignal, LOW); // Send low pulse
+delayMicroseconds(2); // Wait for 2 microseconds
+digitalWrite(ultraSoundSignal, HIGH); // Send high pulse
+delayMicroseconds(5); // Wait for 5 microseconds
+digitalWrite(ultraSoundSignal, LOW); // Holdoff
+
+// Listening for echo pulse
+ 
+pinMode(ultraSoundSignal, INPUT); // Switch signalpin to input
+val = digitalRead(ultraSoundSignal); // Append signal value to val
+while(val == LOW) { // Loop until pin reads a high value
+  val = digitalRead(ultraSoundSignal);
+}
+
+while(val == HIGH) { // Loop until pin reads a high value
+  val = digitalRead(ultraSoundSignal);
+  timecount = timecount +1;            // Count echo pulse time
+}
+
+//Writing out values to the serial port
+
+ultrasoundValue = timecount; // Append echo pulse time to ultrasoundValue
+
+Serial.write('A'); // Example identifier for the sensor
+Serial.print(ultrasoundValue);
+Serial.write(10);
+//serialWrite(13);
+
+// Light up LED if any value is passed by the echo pulse
+
+if(timecount > 0){
+  digitalWrite(ledPin, HIGH);
+}
+
+// Delay of the program
+
+delay(100);
+} 
+
+**************************************************************
+Processing code:
+**************************************************************
+
+import processing.serial.*;
+
+  float x1,y1,x2,y2,a,ai,b,bi,theta;  // cord parameters
+  float H,S,B,Hi,Si,Bi;  // color parameters
+  int fr;
+  
+   
+  // variables for the serial port connection object
+  Serial port;
+  String portname = "/dev/ttyUSB0";  // find the name of your serial port in your system setup!
+  int baudrate = 9600;  //  set baudrate
+  int value;  // variables used to store value from serial port
+  String buf=""; // String buffer to store serial values
+  int value1;  // value1 is the read value
+  int speedrate=100;
+  float range=2.7;  //works well between 2.5 and 3.5
+  int t=2;  //scales up the circle range
+
+
+// the serial event function takes the value of the event and store it in the corresponding variable
+void serialEvent(int serial)
+
+{
+    if(serial!=10) {        
+          buf += char(serial);          
+          } else {
+          buf = buf.substring(1,buf.length());   //extract the value from the string 'buf'
+          value1 = int(buf);    //cast the value to an integer
+          buf="";
+      }
+     }
+// initialize display and serial port objects
+void setup(){
+  
+  size(500,500,P2D);
+  fr=80;
+  frameRate(fr);
+  smooth();
+  a=b=0.0;
+  ai=bi=0.01;
+  H=0; S=100; B=100; Hi=1; Si=0; Bi=0;
+
+      port = new Serial(this, portname, baudrate);
+      println(port);
+     }
+
+// draw listens to serial port, draw 
+void draw(){
+  
+  while(port.available() > 0){
+        value = port.read();
+        serialEvent(value);
+    }
+if(value1/t > width){
+       value1 = width*2;  // range is set to 1200 mm (equivalent to 1200 pixels). Higher causes flickering
+   }
+     
+  // center and scale
+  translate(width/2,height/2);
+  scale(width/2);
+   
+  // initialize color
+  colorMode(RGB);
+  background(0);
+  colorMode(HSB,360,100,100);
+   
+  // draw 360 cords around a circle
+    for(float i=value1/range;i<360;i++){
+    theta=(float)i*PI/180;
+    x1=sin(theta);
+    y1=cos(theta);
+    x2=sin(b*theta); 
+    y2=cos(a*theta);
+    
+     
+    // each cord gets color in wheel
+    H=i;
+    stroke(H,S,B);
+    line(x1,y1,x2,y2);
+    
+    }
+  }
+

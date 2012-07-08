@@ -1,0 +1,211 @@
+Codes for fish_light setup, Dec 14, 2010
+********************************************
+
+//ARDUINO
+//original code:
+//http://luckylarry.co.uk/arduino-projects/using-processing-to-send-values-to-arduino/
+
+// create an array of PWM LED pins, in case of replacing rgb LED with single color LEDs
+//int ledPin[] = {9,10,11};
+// an array to store the pins for the RGB LED
+int RGBLpins[] = {
+  9,10,11};
+// array to store the 3 values from the serial port
+int incomingByte[3];
+
+void setup() {
+  // initialize serial communication - needs to be the same as in the processing code
+  Serial.begin(9600);
+  // loop through and set the pins as outputs
+  for (int i=0; i<3; i++) {
+    // pinMode(ledPin[i], OUTPUT);    //for single LEDs
+    pinMode(RGBLpins[i], OUTPUT);
+  }
+}
+
+/*  3 pins are stored in an array; 3 values from the serial buffer
+ are stored in an array, by looping through both we can light up the LEDs
+ using the values sent from the Processing sketch. NOTE: the values sent over
+ the serial port don't seem to be in order, rather than RGB, the order was GBR so it
+ looks like it misses the first byte - so its just trial and error matching
+ the correct pin to the correct value.
+ */
+
+void loop() {
+  // check to make sure there's 3 bytes of data waiting
+  if (Serial.available() >= 3) {
+    // read the oldest byte in the serial buffer:
+    for (int i=0; i<3; i++) {
+      // read each byte
+      incomingByte[i] = Serial.read();
+      // pass the value to each pin
+      // analogWrite is used to write a value between 0 and 255 to the PWM pin.
+      // lightup the separate LED's
+      // analogWrite(ledPin[i], incomingByte[i]);
+      // seems that my RGB LED sees the values differently - it sees 255 as nothing and 0 as full colour!
+      int val1 = int(incomingByte[i])+33;
+      //int val2 = int(incomingByte[i]);
+      analogWrite(RGBLpins[i], val1);
+    }
+  }
+
+}
+
+
+*************************************************
+
+
+//PROCESSING
+//Camera capture of the fish in aquarium. Arduino dimms LED according to the fish position (X axis).
+//Install gsvideo library into Processing from sourceforge.net to work around QuickTime: http://gsvideo.sourceforge.net/
+
+
+import codeanticode.gsvideo.*;     // gsvideo library to work around QuickTime (which doesn't work with Linux)
+import processing.serial.*;
+
+Serial myPort;
+
+boolean new_video_image=false;
+boolean fish;
+int fast_parse=1;
+int threshold_fish_detection=1500/fast_parse;
+int average_column_difference;
+int num_pixels;
+int[] bgnd_lum;
+int[] diff_lum;
+int[] column_difference;
+int[] ringbuffer_position;
+float[] ringbuffer_target_position;
+int left_cut;
+int right_cut;
+int middle;
+int diff_sum;
+int video_x=320;
+int video_y=240;
+int image_x=320;
+int image_y=270;
+int video_fps;
+int draw_fps;
+int video_fps_old;
+int draw_fps_old;
+int send_fish;
+
+String index_number[]=new String[1];
+
+GSCapture video;          // "GS" in "GSCapture" comes from gsvideo library
+
+PFont font;
+
+void setup() {
+  background(0);
+  size(image_x, image_y); 
+  background(0);
+
+  // println(Serial.list());
+  myPort=new Serial(this, Serial.list()[0],9600);
+
+  video = new GSCapture(this, video_x,video_y);
+  num_pixels = video_x*video_y;
+
+  bgnd_lum = new int[num_pixels];
+  diff_lum = new int[num_pixels];
+  column_difference = new int[video_x];
+  ringbuffer_position=new int [100];
+  ringbuffer_target_position=new float [100];
+  loadPixels();
+}
+
+void draw() {                                                // LOOP BEGINS HERE
+
+  new_video_image=false;                       
+  draw_fps_old=draw_fps;                                    // draw refresh speed
+  draw_fps=millis();                                        // """"""""""""""""""
+
+  if (video.available()) {                                 
+
+    video.read();                                           // load new video image ...
+    video.loadPixels();                                     // ... in pixel array
+
+    //-------------------------------------------------------- parse video image for differences to previous image
+    for (int i=0;i<video_x;i++) {  
+      column_difference[i]=0;
+    }
+
+    diff_sum=0;                                               // reset difference of all video pixels
+    for (int x=0;x<video_x;x++) {                             // draw video image & difference image 
+      for (int y=0;y<video_y;y+=fast_parse) {
+        int i=(y*video_x)+x;                          // parse all video pixels for difference to previous video image
+        int   curr_lum = ((video.pixels[i] >> 16) & 0xFF) + ((video.pixels[i] >> 8) & 0xFF) + (video.pixels[i] & 0xFF); // calculate luminance of pixel
+        diff_lum[i] = abs(curr_lum - bgnd_lum[i]);            // calculate luminance difference to previous video pixel
+        diff_sum+=diff_lum[i];                                // sum up difference of all video pixels
+        column_difference[i%video_x]+= diff_lum[i];           // sum up difference for every column                                                           
+        bgnd_lum[i]=curr_lum;                                 // store new background reference
+      }
+    }
+
+    if (diff_sum>0) {                                        // if new video image is different from previous video image
+      new_video_image=true;                                 // => new video image detected 
+      video_fps_old=video_fps;                              // video refresh speed
+      video_fps=millis();                                   // """""""""""""""""""
+    }                  
+
+    if (new_video_image) {                                  // if there's a new video image [with, really, different content than the previous videoimage]
+      for (int x=0;x<video_x;x++) {                         // draw video image & difference image 
+        for (int y=0;y<video_y;y+=fast_parse) {
+          int image_pos=(y*image_x)+x;
+          int video_pos=(y*video_x)+x;
+          pixels[image_pos] = video.pixels[video_pos];      // draw video [left side]
+          // pixels[image_pos+319] = 0xff000000 | (diff_lum[video_pos]<<8);// draw difference [right side; green]
+        }
+      }
+      updatePixels();                                       // refresh pixel array
+      for(int i = 2; i < video_x-2; i++) {                  // smooth all column differences (mix with neighbours)
+        column_difference[i]=(column_difference[i-1]+column_difference[i-2]+column_difference[i]+column_difference[i+1]+column_difference[i+2])/5;
+      }
+
+      average_column_difference=diff_sum/video_x;           // calculate average column difference as reference
+
+
+      //-------------------------------------------------------- calculate position of the fish
+
+      fish=false;                                         // reset fish detection
+      right_cut=0;            
+      for(int i = 0; i < video_x; i++) {                    // parse [from left to right] for position, where difference exceeds threshold 
+        if (column_difference[i]-threshold_fish_detection>average_column_difference) {
+          right_cut=i;
+          fish=true;
+        }
+      }
+
+      left_cut=320;        
+      for(int i = video_x-1; i >= 0; i--) {                 // parse [from right to left] for position, where difference exceeds threshold
+        if (column_difference[i]-threshold_fish_detection>diff_sum/video_x) {
+          left_cut=i;
+          fish=true;
+        }
+      }
+
+      if (fish && right_cut-left_cut>15) {                // if difference in the picture is wider than 15 columns: 
+        middle=(left_cut+right_cut)/2;                      // => calculate middle
+      }
+      else {                                                // if difference is less ...
+        fish=false;                                       // => fish is not accepted
+      } 
+
+      stroke(0,255,0);
+      line(middle,0,middle,240);                            // draw middle of the fish [green]
+      strokeWeight(1);
+      fill(0,255,0,230);
+      text("FISH POSITION",2,255);              // """""""""""""""""""""""""""" [text]
+
+      //-------------------------------------------------------- serial communication
+
+      myPort.clear();                                         
+      send_fish=int(map(middle, 10, 310, 0, 222));
+      send_fish=constrain(send_fish,0,222);
+      myPort.write(send_fish);
+    }
+  }
+}
+
+
